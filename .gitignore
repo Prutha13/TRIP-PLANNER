@@ -1,0 +1,44 @@
+# =======================================================
+# Root Git Ignore - Trip Planner Project
+# =======================================================
+
+# Environment files & Secrets (CRITICAL: Do NOT commit!)
+.env
+.env.*
+!.env.example
+
+# Python / Backend
+ai_trip_planner_backend/.env
+ai_trip_planner_backend/.env.*
+ai_trip_planner_backend/venv/
+ai_trip_planner_backend/trip_planner.db
+ai_trip_planner_backend/QA_Test_Report.html
+**/__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+venv/
+env/
+ENV/
+
+# SQLite Databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Node / Frontend
+**/node_modules/
+node_modules/
+dist/
+dist-ssr/
+*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor & OS artifacts
+.vscode/
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db

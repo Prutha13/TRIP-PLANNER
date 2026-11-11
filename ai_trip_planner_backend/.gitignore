@@ -1,0 +1,29 @@
+# Environment variables & secrets (CRITICAL: Do NOT commit!)
+.env
+.env.*
+!.env.example
+
+# Python virtual environment
+venv/
+env/
+ENV/
+
+# Python cache & bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# SQLite Database
+*.db
+*.sqlite
+*.sqlite3
+trip_planner.db
+
+# Test reports & logs
+QA_Test_Report.html
+*.log
+
+# Editor files
+.vscode/
+.idea/

@@ -1,25 +1,19 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import Markdown from 'react-markdown'
 import html2pdf from 'html2pdf.js'
 import { 
   Compass, 
-  Navigation,
-  Calendar, 
-  MapPin, 
-  CreditCard, 
-  Globe, 
+  Navigation, 
   FileText, 
-  Trash2, 
-  Copy, 
-  CheckCircle2, 
   Sun, 
   Moon, 
-  ArrowRight, 
+  Calendar, 
   Download, 
-  Search, 
-  Shield, 
+  Copy, 
+  Trash2, 
+  CheckCircle2, 
+  MapPin, 
   Zap, 
-  Clock, 
   Layers,
   Map,
   Hotel,
@@ -27,11 +21,15 @@ import {
   ChevronRight,
   AlertTriangle,
   Star,
-  Users,
-  Check,
-  Bookmark,
-  Activity
+  Activity,
+  Plane,
+  Sparkles,
+  Share2,
+  BookmarkCheck,
+  Search
 } from 'lucide-react'
+import './App.css'
+
 const DEFAULT_TRAVEL_IMAGE = "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?auto=format&fit=crop&w=1200&q=80";
 
 const DESTINATION_IMAGES = {
@@ -100,7 +98,6 @@ function DestinationImage({ destName, alt, className = "", style = {} }) {
       return;
     }
 
-    // Dynamic Live Fetch via Wikipedia REST API
     async function fetchWikiImage() {
       try {
         const query = destName.trim();
@@ -130,184 +127,213 @@ function DestinationImage({ destName, alt, className = "", style = {} }) {
   }, [destName]);
 
   return (
-    <img
-      src={imgSrc || DEFAULT_TRAVEL_IMAGE}
-      alt={alt || destName || "Travel Destination"}
-      className={className}
-      style={style}
-      loading="lazy"
+    <img 
+      src={imgSrc || DEFAULT_TRAVEL_IMAGE} 
+      alt={alt || destName || "Travel Destination"} 
+      className={className} 
+      style={style} 
       onError={(e) => {
-        e.currentTarget.onerror = null;
-        e.currentTarget.src = DEFAULT_TRAVEL_IMAGE;
+        e.target.onerror = null;
+        e.target.src = DEFAULT_TRAVEL_IMAGE;
       }}
     />
   );
 }
 
 function App() {
-  const [destination, setDestination] = useState('')
-  const [days, setDays] = useState('3')
-  const [theme, setTheme] = useState('General Exploration')
-  const [budgetLevel, setBudgetLevel] = useState('Medium') 
-  const [language, setLanguage] = useState('English')
-  const [itinerary, setItinerary] = useState(null)
-  const [isLoading, setIsLoading] = useState(false)
-  const [loadingText, setLoadingText] = useState('Initializing AI engine...')
-  const [isDarkMode, setIsDarkMode] = useState(false)
-  const [activeTab, setActiveTab] = useState('home') // 'home' | 'planner' | 'myTrips'
-  const [savedTrips, setSavedTrips] = useState([])
-  const [demoDay, setDemoDay] = useState(1)
-  
-  const [toast, setToast] = useState({ show: false, message: '', type: 'success' })
-  const [tripToDelete, setTripToDelete] = useState(null)
+  const [activeTab, setActiveTab] = useState('home');
+  const [destination, setDestination] = useState('');
+  const [days, setDays] = useState('3');
+  const [theme, setTheme] = useState('General Exploration');
+  const [budgetLevel, setBudgetLevel] = useState('Medium');
+  const [language, setLanguage] = useState('English');
+  const [itinerary, setItinerary] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadingStep, setLoadingStep] = useState(0);
+  const [savedTrips, setSavedTrips] = useState([]);
+  const [savedSearchQuery, setSavedSearchQuery] = useState('');
+  const [tripToDelete, setTripToDelete] = useState(null);
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    return localStorage.getItem('horizon_theme') === 'dark';
+  });
+  const [toast, setToast] = useState({ show: false, message: '', type: 'primary' });
+  const [backendStatus, setBackendStatus] = useState('checking');
 
-  const showToast = (message, type = 'success') => {
-    setToast({ show: true, message, type });
-    setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 3500); 
-  }
-
-  // Dark mode effect
+  // Sync Dark Mode with DOM and localStorage
   useEffect(() => {
     document.documentElement.setAttribute('data-bs-theme', isDarkMode ? 'dark' : 'light');
+    localStorage.setItem('horizon_theme', isDarkMode ? 'dark' : 'light');
   }, [isDarkMode]);
 
-  // Fetch saved trips
+  // Check Backend Health
   useEffect(() => {
-    if (activeTab === 'myTrips') fetchSavedTrips();
-  }, [activeTab]);
+    const checkHealth = async () => {
+      try {
+        const res = await fetch('http://127.0.0.1:8000/health');
+        if (res.ok) {
+          setBackendStatus('connected');
+        } else {
+          setBackendStatus('offline');
+        }
+      } catch (err) {
+        setBackendStatus('offline');
+      }
+    };
+    checkHealth();
+  }, []);
 
-  // Cycling loading text
+  const showToast = (message, type = 'primary') => {
+    setToast({ show: true, message, type });
+    setTimeout(() => {
+      setToast(prev => ({ ...prev, show: false }));
+    }, 4500);
+  };
+
+  // Status steps during generation
+  const loadingMessages = [
+    "Exploring flight routes and transit...",
+    "Curating boutique accommodations...",
+    "Mapping landmarks and culinary stops...",
+    "Synthesizing your Horizon Code itinerary..."
+  ];
+
   useEffect(() => {
     let interval;
     if (isLoading) {
-      const messages = [
-        "Initializing AI engine...",
-        "Calculating neural price prediction...",
-        "Structuring daily itinerary...",
-        "Finding top stays and recommendations...",
-        "Generating flight and location maps...",
-        "Finalizing your trip plan..."
-      ];
-      let i = 0;
-      setLoadingText(messages[0]); 
-      
       interval = setInterval(() => {
-        i = (i + 1) % messages.length;
-        setLoadingText(messages[i]);
-      }, 2000); 
-    } 
+        setLoadingStep(prev => (prev + 1) % loadingMessages.length);
+      }, 1500);
+    }
     return () => clearInterval(interval);
   }, [isLoading]);
 
   const fetchSavedTrips = async () => {
     try {
       const response = await fetch('http://127.0.0.1:8000/get-trips');
-      const data = await response.json();
-      setSavedTrips(data);
+      if (response.ok) {
+        const data = await response.json();
+        setSavedTrips(data);
+      }
     } catch (error) {
       console.error("Error fetching trips:", error);
     }
   };
 
+  useEffect(() => {
+    if (activeTab === 'myTrips') {
+      fetchSavedTrips();
+    }
+  }, [activeTab]);
+
+  const calculateBudgetPreview = (durationDays, budgetTier) => {
+    const d = parseInt(durationDays) || 3;
+    let base = d * 4500;
+    if (budgetTier === 'Low') base = d * 2200;
+    if (budgetTier === 'High') base = d * 11500;
+    return `₹${Math.round(base * 0.9).toLocaleString('en-IN')} - ₹${Math.round(base * 1.25).toLocaleString('en-IN')}`;
+  };
+
   const handleGenerate = async (e) => {
-    if (e) e.preventDefault()
-    if (!destination || !days) {
-      showToast("Please enter destination and duration.", "danger");
+    if (e) e.preventDefault();
+    if (!destination.trim() || !days) {
+      showToast("Please provide both destination and duration.", "danger");
       return;
     }
 
-    setIsLoading(true)
-    setItinerary(null) 
-    setActiveTab('planner')
+    const dayNum = parseInt(days);
+    if (isNaN(dayNum) || dayNum < 1 || dayNum > 30) {
+      showToast("Trip duration must be between 1 and 30 days.", "danger");
+      return;
+    }
+
+    setIsLoading(true);
+    setItinerary(null);
+    setActiveTab('planner');
 
     try {
-      showToast("Calculating budget forecast...", "primary")
-      
-      const requestedDays = parseInt(days) || 1;
-      let basePrice = requestedDays * 2500 + 500;
-      let finalPrice = basePrice;
+      const response = await fetch('http://127.0.0.1:8000/generate-itinerary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          destination: destination.trim(),
+          days: dayNum,
+          theme,
+          budget_level: budgetLevel,
+          language
+        })
+      });
 
-      if (budgetLevel === 'Low') {
-        finalPrice = Math.round(basePrice * 0.6);
-      } else if (budgetLevel === 'High') {
-        finalPrice = Math.round(basePrice * 2.5);
+      if (!response.ok) {
+        throw new Error('Backend failed to generate itinerary');
       }
 
-      const exactBudget = `${budgetLevel} (Estimated Cost: ₹${finalPrice.toLocaleString('en-IN')})`
-      showToast(`Estimated budget: ₹${finalPrice.toLocaleString('en-IN')}. Generating itinerary...`, "success")
-
-      // Call Python Backend
-      const response = await fetch(`http://127.0.0.1:8000/generate-itinerary?destination=${encodeURIComponent(destination)}&days=${days}&theme=${encodeURIComponent(theme)}&budget_level=${encodeURIComponent(exactBudget)}&language=${encodeURIComponent(language)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      })
-
-      if (!response.ok) throw new Error('Network response failed')
-      const data = await response.json()
-      setItinerary(data.ai_plan || data.message) 
-      
-    } catch (error) {
-      console.error(error)
-      setItinerary("Unable to connect to backend server. Please make sure the service is active.")
-      showToast("Failed to generate trip itinerary.", "danger")
+      const data = await response.json();
+      setItinerary(data.ai_plan);
+      showToast(`Itinerary generated for ${destination}!`, "success");
+    } catch (err) {
+      console.error("Generation error:", err);
+      setItinerary(`Unable to connect to backend server. Make sure the FastAPI service is running on Port 8000.`);
+      showToast("Could not contact backend service. Please check terminal.", "danger");
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
-
-  const quickStartDestination = (destName, themeName) => {
-    setDestination(destName);
-    setTheme(themeName);
-    setDays('3');
-    setActiveTab('planner');
-    showToast(`Selected ${destName}. Ready to plan!`, "primary");
-  }
+  };
 
   const handleSaveTrip = async () => {
+    if (!destination || !itinerary) return;
     try {
       const response = await fetch('http://127.0.0.1:8000/save-trip', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          destination, days: parseInt(days), theme, budget_level: budgetLevel, itinerary
+          destination: destination.trim(),
+          days: parseInt(days) || 3,
+          theme,
+          budget_level: budgetLevel,
+          itinerary
         })
       });
-      if (response.ok) showToast("Trip saved to your library.");
-    } catch (error) {
-      showToast("Failed to save trip.", "danger");
+      if (response.ok) {
+        showToast("Trip saved to your Horizon Library!", "success");
+        fetchSavedTrips();
+      } else {
+        showToast("Could not save trip.", "danger");
+      }
+    } catch (err) {
+      showToast("Failed to save trip to library.", "danger");
     }
-  }
+  };
 
   const handleCopy = () => {
     if (itinerary) {
       navigator.clipboard.writeText(itinerary);
-      showToast("Itinerary copied to clipboard.", "success");
+      showToast("Itinerary copied to clipboard!", "success");
     }
-  }
+  };
 
   const handleDownloadPDF = () => {
     const element = document.getElementById('itinerary-content');
+    if (!element) return;
     const opt = {
       margin: 0.5,
-      filename: `${destination.toLowerCase().replace(/\s+/g, '-')}-itinerary.pdf`,
+      filename: `${destination.toLowerCase().replace(/\s+/g, '-')}-horizon-itinerary.pdf`,
       image: { type: 'jpeg', quality: 0.98 },
       html2canvas: { scale: 2 },
       jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
     };
-    
     showToast("Generating PDF document...", "primary");
     html2pdf().set(opt).from(element).save().then(() => {
-      showToast("PDF downloaded successfully.", "success");
+      showToast("PDF downloaded successfully!", "success");
     });
-  }
+  };
 
   const handleAddToCalendar = () => {
-    const eventTitle = encodeURIComponent(`Trip to ${destination}`);
-    const eventDetails = encodeURIComponent(`My ${days}-day AI generated trip.\nTheme: ${theme}\nBudget: ${budgetLevel}`);
+    const eventTitle = encodeURIComponent(`Trip to ${destination} (Horizon Code)`);
+    const eventDetails = encodeURIComponent(`Travel Itinerary for ${destination}\nDuration: ${days} Days\nTheme: ${theme}\nBudget: ${budgetLevel}`);
     const calendarUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${eventTitle}&details=${eventDetails}`;
     window.open(calendarUrl, '_blank');
     showToast("Opening Google Calendar...", "success");
-  }
+  };
 
   const confirmDelete = async () => {
     if (!tripToDelete) return;
@@ -320,30 +346,63 @@ function App() {
     } catch (error) {
       console.error("Error deleting trip:", error);
     }
-    setTripToDelete(null); 
+    setTripToDelete(null);
   };
 
-  return (
-    <div className={`min-vh-100 d-flex flex-column position-relative ${isDarkMode ? 'app-bg-dark text-white' : 'app-bg-light text-dark'}`}>
+  const quickStartDestination = (destName, themeName) => {
+    setDestination(destName);
+    setTheme(themeName);
+    setDays('3');
+    setActiveTab('planner');
+    showToast(`Loaded ${destName}. Ready to generate!`, "primary");
+  };
 
-      {/* Glass Navigation Header */}
-      <header>
-        <nav className="navbar navbar-expand-lg sticky-top glass-nav px-3 px-lg-4" style={{ zIndex: 1050 }}>
-          <div className="container-fluid max-w-7xl">
+  const filteredTrips = savedTrips.filter(t => 
+    t.destination?.toLowerCase().includes(savedSearchQuery.toLowerCase()) ||
+    t.theme?.toLowerCase().includes(savedSearchQuery.toLowerCase())
+  );
+
+  return (
+    <div className={`min-vh-100 d-flex flex-column position-relative ${isDarkMode ? 'app-atmosphere-dark text-white' : 'app-atmosphere-light'}`}>
+      
+      {/* ========================================================== */}
+      {/* HORIZON CODE NAVIGATION HEADER                             */}
+      {/* ========================================================== */}
+      <header className="sticky-top" style={{ zIndex: 1040 }}>
+        <nav className="horizon-nav px-3 px-lg-4 py-3">
+          <div className="container-fluid max-w-7xl d-flex align-items-center justify-content-between">
+            
+            {/* Brand Logo & Tagline */}
             <a 
-              className="navbar-brand d-flex align-items-center gap-2 fw-bold fs-5 text-gradient cursor-pointer" 
               href="#" 
-              onClick={(e) => { e.preventDefault(); setActiveTab('home'); }}
+              onClick={(e) => { e.preventDefault(); setActiveTab('home'); }} 
+              className="d-flex align-items-center gap-2 text-decoration-none"
             >
-              <div className="p-2 rounded-3 bg-primary text-white d-flex align-items-center justify-content-center shadow-sm">
-                <Compass size={22} />
+              <div 
+                className="d-flex align-items-center justify-content-center text-white shadow-sm"
+                style={{ 
+                  width: '42px', 
+                  height: '42px', 
+                  borderRadius: '14px',
+                  background: 'linear-gradient(135deg, #1F3570 0%, #3E64B0 60%, #7FA6E0 100%)'
+                }}
+              >
+                <Compass size={22} color="#FFF6E8" />
               </div>
-              <span className="tracking-tight">AI TRIP PLANNER</span>
+              <div>
+                <div className="font-display fw-bold fs-5 tracking-tight text-horizon-gradient mb-0 line-height-1">
+                  HORIZON CODE
+                </div>
+                <div className="small text-muted d-none d-sm-block" style={{ fontSize: '0.72rem', letterSpacing: '0.08em' }}>
+                  INTELLIGENT TRAVEL SUITE
+                </div>
+              </div>
             </a>
 
-            <div className="d-flex align-items-center gap-2 ms-auto">
+            {/* Navigation Tabs */}
+            <div className="d-flex align-items-center gap-1 gap-md-2">
               <button 
-                className={`nav-pill-btn ${activeTab === 'home' ? 'active' : ''}`}
+                className={`horizon-nav-pill ${activeTab === 'home' ? 'active' : ''}`}
                 onClick={() => setActiveTab('home')}
               >
                 <Compass size={16} />
@@ -351,7 +410,7 @@ function App() {
               </button>
 
               <button 
-                className={`nav-pill-btn ${activeTab === 'planner' ? 'active' : ''}`}
+                className={`horizon-nav-pill ${activeTab === 'planner' ? 'active' : ''}`}
                 onClick={() => setActiveTab('planner')}
               >
                 <Navigation size={16} />
@@ -359,57 +418,82 @@ function App() {
               </button>
 
               <button 
-                className={`nav-pill-btn ${activeTab === 'myTrips' ? 'active' : ''}`}
+                className={`horizon-nav-pill ${activeTab === 'myTrips' ? 'active' : ''}`}
                 onClick={() => setActiveTab('myTrips')}
               >
                 <FileText size={16} />
                 <span>My Trips</span>
+                {savedTrips.length > 0 && (
+                  <span className="badge rounded-pill bg-white text-dark ms-1 px-2" style={{ fontSize: '0.7rem' }}>
+                    {savedTrips.length}
+                  </span>
+                )}
               </button>
 
               <div className="vr mx-2 opacity-25 d-none d-sm-block" style={{ height: '24px' }}></div>
 
+              {/* Theme Toggle Button */}
               <button 
-                className="btn btn-outline-secondary rounded-circle p-2 border-0 d-flex align-items-center justify-content-center"
+                className="btn btn-horizon-outline rounded-circle p-2 d-flex align-items-center justify-content-center"
                 onClick={() => setIsDarkMode(!isDarkMode)}
-                title="Toggle Theme"
-                style={{ width: '38px', height: '38px' }}
+                title={isDarkMode ? "Switch to Sunrise Light" : "Switch to Horizon Night"}
+                style={{ width: '40px', height: '40px', padding: 0 }}
               >
-                {isDarkMode ? <Sun size={18} className="text-warning" /> : <Moon size={18} className="text-secondary" />}
+                {isDarkMode ? <Sun size={18} color="#FFF6E8" /> : <Moon size={18} color="#1F3570" />}
               </button>
             </div>
+
           </div>
         </nav>
       </header>
 
-      {/* Main Container */}
+      {/* ========================================================== */}
+      {/* MAIN CONTENT REGION                                        */}
+      {/* ========================================================== */}
       <main className="flex-grow-1 container max-w-7xl py-4 py-lg-5 position-relative" style={{ zIndex: 1 }}>
-        
+
         {/* ========================================================== */}
-        {/* LANDING PAGE                                                */}
+        {/* TAB 1: HOME / LANDING VIEW                                 */}
         {/* ========================================================== */}
         {activeTab === 'home' && (
-          <div className="animate-fade-up">
+          <div className="animate-horizon-fade">
             
-            {/* HERO SECTION */}
-            <section className="py-4 py-lg-5">
-              <div className="text-center max-w-3xl mx-auto mb-5">
-                <div className="badge-feature mb-3">
-                  <Navigation size={14} />
-                  <span>Next-Generation Intelligent Travel Engine</span>
+            {/* HERO BANNER SECTION */}
+            <section className="py-4 py-lg-5 text-center position-relative">
+              
+              {/* Reference Color Palette Card (Horizon Code Showcase) */}
+              <div className="d-inline-flex align-items-center gap-2 horizon-card px-4 py-2 mb-4 border border-1 shadow-sm">
+                <span className="animate-horizon-pulse rounded-circle" style={{ width: '10px', height: '10px', backgroundColor: '#3E64B0' }}></span>
+                <span className="small fw-bold tracking-wider" style={{ color: 'var(--text-heading)', fontSize: '0.8rem' }}>
+                  HORIZON CODE AESTHETIC:
+                </span>
+                <div className="d-flex align-items-center gap-1 ms-1">
+                  {['#0B1430', '#1F3570', '#3E64B0', '#7FA6E0', '#C9DDF5', '#FFF6E8'].map((c, i) => (
+                    <span 
+                      key={i} 
+                      title={c} 
+                      className="rounded-circle border border-white shadow-xs" 
+                      style={{ width: '14px', height: '14px', backgroundColor: c, display: 'inline-block' }}
+                    />
+                  ))}
                 </div>
-                <h1 className="fw-extrabold display-3 mb-3 tracking-tight">
-                  Intelligent Travel Planning, <span className="text-gradient">Reimagined</span>
-                </h1>
-                <p className="lead text-muted fs-5 mb-4" style={{ lineHeight: '1.7' }}>
-                  Effortlessly build multi-day travel itineraries powered by neural cost forecasting, hotel recommendations, and Google Maps integration.
-                </p>
               </div>
 
-              {/* HERO INLINE PLANNER FORM CARD */}
-              <div className="glass-card rounded-5 p-4 p-md-5 max-w-4xl mx-auto shadow-2xl mb-5">
+              {/* Headline */}
+              <h1 className="display-3 fw-bold mb-3 font-display tracking-tight text-horizon-gradient">
+                A Wide Sky Waiting to be Written.
+              </h1>
+              <p className="lead max-w-2xl mx-auto mb-5 text-muted" style={{ lineHeight: '1.7', fontSize: '1.2rem' }}>
+                Generate intelligent multi-day travel itineraries with real-time budget forecasting, authentic stays, and integrated map routes.
+              </p>
+
+              {/* HERO QUICK PLANNER CARD */}
+              <div className="horizon-card max-w-4xl mx-auto p-4 p-md-5 mb-5 text-start shadow-lg">
                 <div className="row g-3">
+                  
+                  {/* Destination Input */}
                   <div className="col-md-5">
-                    <div className="form-floating">
+                    <div className="horizon-form-floating form-floating">
                       <input 
                         type="text" 
                         className="form-control" 
@@ -421,9 +505,10 @@ function App() {
                       <label htmlFor="heroDest">Where are you going?</label>
                     </div>
                   </div>
-                  
+
+                  {/* Duration */}
                   <div className="col-md-3">
-                    <div className="form-floating">
+                    <div className="horizon-form-floating form-floating">
                       <input 
                         type="number" 
                         className="form-control" 
@@ -432,13 +517,15 @@ function App() {
                         value={days} 
                         onChange={(e) => setDays(e.target.value)} 
                         min="1" 
+                        max="30"
                       />
                       <label htmlFor="heroDays">Duration (Days)</label>
                     </div>
                   </div>
 
+                  {/* Budget Level */}
                   <div className="col-md-4">
-                    <div className="form-floating">
+                    <div className="horizon-form-floating form-floating">
                       <select 
                         className="form-select" 
                         id="heroBudget" 
@@ -453,8 +540,9 @@ function App() {
                     </div>
                   </div>
 
+                  {/* Theme */}
                   <div className="col-md-4">
-                    <div className="form-floating">
+                    <div className="horizon-form-floating form-floating">
                       <select 
                         className="form-select" 
                         id="heroTheme" 
@@ -466,13 +554,15 @@ function App() {
                         <option value="Cultural Heritage">Cultural Heritage</option>
                         <option value="Scenic Bike Riding">Scenic Bike Riding</option>
                         <option value="Pure Relaxation">Pure Relaxation</option>
+                        <option value="Food & Culinary Tour">Food & Culinary Tour</option>
                       </select>
-                      <label htmlFor="heroTheme">Travel Theme</label>
+                      <label htmlFor="heroTheme">Travel Vibe</label>
                     </div>
                   </div>
 
+                  {/* Output Language */}
                   <div className="col-md-4">
-                    <div className="form-floating">
+                    <div className="horizon-form-floating form-floating">
                       <select 
                         className="form-select" 
                         id="heroLang" 
@@ -491,356 +581,182 @@ function App() {
                     </div>
                   </div>
 
+                  {/* CTA Generate */}
                   <div className="col-md-4">
                     <button 
                       onClick={handleGenerate}
-                      className="btn btn-primary-gradient w-100 h-100 rounded-4 py-3 fw-bold d-flex align-items-center justify-content-center gap-2 shadow"
+                      className="btn-horizon-primary w-100 h-100 py-3"
                     >
-                      <Navigation size={18} />
-                      <span>Generate Itinerary</span>
+                      <Sparkles size={18} />
+                      <span>Plan This Journey</span>
                     </button>
                   </div>
+
                 </div>
 
-                {/* Hero Tech Badges */}
-                <div className="d-flex flex-wrap align-items-center justify-content-center gap-4 mt-4 pt-3 border-top border-opacity-10 small text-muted">
+                {/* Features Under Hero Card */}
+                <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 mt-4 pt-4 border-top border-opacity-10 small text-muted">
                   <span className="d-flex align-items-center gap-2">
-                    <Zap size={16} className="text-primary" />
-                    Intelligent Budget Forecasting
+                    <Zap size={16} color="#3E64B0" />
+                    Intelligent Budget Forecasting (₹ INR)
                   </span>
                   <span className="d-flex align-items-center gap-2">
-                    <CheckCircle2 size={16} className="text-success" />
-                    Google Maps & Flights Integration
+                    <Plane size={16} color="#7FA6E0" />
+                    Google Flights & Stays Search
                   </span>
                   <span className="d-flex align-items-center gap-2">
-                    <Globe size={16} className="text-info" />
-                    7 Languages Supported
+                    <Map size={16} color="#1F3570" />
+                    Google Maps Link Integration
                   </span>
                 </div>
               </div>
+
             </section>
 
             {/* POPULAR DESTINATIONS GRID */}
-            <section className="py-5">
+            <section className="py-4">
               <div className="d-flex align-items-end justify-content-between mb-4">
                 <div>
-                  <h3 className="fw-bold mb-1">Trending Destinations</h3>
-                  <p className="text-muted small mb-0">Select any location to pre-fill your trip planner instantly.</p>
+                  <span className="horizon-badge mb-2">CURATED DESTINATIONS</span>
+                  <h2 className="display-6 fw-bold mb-1">Trending Expeditions</h2>
+                  <p className="text-muted small mb-0">Select any card to automatically pre-configure your trip details.</p>
                 </div>
                 <button 
                   onClick={() => setActiveTab('planner')} 
-                  className="btn btn-link text-primary text-decoration-none fw-semibold d-inline-flex align-items-center gap-1 p-0"
+                  className="btn-horizon-outline btn-sm"
                 >
-                  <span>View All Options</span>
+                  <span>Open Full Planner</span>
                   <ChevronRight size={16} />
                 </button>
               </div>
 
               <div className="row g-4">
+                
+                {/* Destination 1: Udaipur */}
                 <div className="col-md-6 col-lg-4">
                   <div 
-                    className="glass-card-hover" 
+                    className="horizon-card horizon-card-hover overflow-hidden cursor-pointer position-relative" 
+                    style={{ height: '300px' }}
                     onClick={() => quickStartDestination('Udaipur', 'Historical Mysteries')}
-                    style={{ position: 'relative', overflow: 'hidden', height: '280px', width: '100%', borderRadius: '20px', cursor: 'pointer', backgroundColor: '#1e293b' }}
                   >
                     <DestinationImage 
                       destName="Udaipur" 
                       alt="Udaipur" 
-                      style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block', zIndex: 1 }}
+                      className="horizon-dest-img position-absolute top-0 start-0 w-100 h-100" 
                     />
-                    <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(15, 23, 42, 0.95) 0%, rgba(15, 23, 42, 0.3) 60%, transparent 100%)', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', padding: '20px', color: 'white', zIndex: 2 }}>
-                      <span className="badge bg-primary bg-opacity-75 rounded-pill w-fit-content mb-2">Heritage & Palaces</span>
-                      <h4 className="fw-bold mb-1">Udaipur, Rajasthan</h4>
-                      <p className="small mb-0 opacity-80">Royal lakes, historical forts, and cultural walks.</p>
+                    <div 
+                      className="position-absolute inset-0 d-flex flex-column justify-content-end p-4 text-white"
+                      style={{ 
+                        background: 'linear-gradient(to top, rgba(11, 20, 48, 0.95) 0%, rgba(11, 20, 48, 0.3) 65%, transparent 100%)',
+                        zIndex: 2 
+                      }}
+                    >
+                      <span className="horizon-badge horizon-badge-primary w-fit-content mb-2">Heritage & Palaces</span>
+                      <h4 className="fw-bold mb-1 text-white">Udaipur, Rajasthan</h4>
+                      <p className="small mb-0 opacity-80" style={{ color: '#C9DDF5' }}>Lakeside palaces, regal forts, and sunset boat rides.</p>
                     </div>
                   </div>
                 </div>
 
+                {/* Destination 2: Manali */}
                 <div className="col-md-6 col-lg-4">
                   <div 
-                    className="glass-card-hover" 
+                    className="horizon-card horizon-card-hover overflow-hidden cursor-pointer position-relative" 
+                    style={{ height: '300px' }}
                     onClick={() => quickStartDestination('Manali', 'Scenic Bike Riding')}
-                    style={{ position: 'relative', overflow: 'hidden', height: '280px', width: '100%', borderRadius: '20px', cursor: 'pointer', backgroundColor: '#1e293b' }}
                   >
                     <DestinationImage 
                       destName="Manali" 
                       alt="Manali" 
-                      style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block', zIndex: 1 }}
+                      className="horizon-dest-img position-absolute top-0 start-0 w-100 h-100" 
                     />
-                    <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(15, 23, 42, 0.95) 0%, rgba(15, 23, 42, 0.3) 60%, transparent 100%)', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', padding: '20px', color: 'white', zIndex: 2 }}>
-                      <span className="badge bg-primary bg-opacity-75 rounded-pill w-fit-content mb-2">Alpine Peaks</span>
-                      <h4 className="fw-bold mb-1">Manali, Himachal</h4>
-                      <p className="small mb-0 opacity-80">Mountain passes, valley views, and scenic rides.</p>
+                    <div 
+                      className="position-absolute inset-0 d-flex flex-column justify-content-end p-4 text-white"
+                      style={{ 
+                        background: 'linear-gradient(to top, rgba(11, 20, 48, 0.95) 0%, rgba(11, 20, 48, 0.3) 65%, transparent 100%)',
+                        zIndex: 2 
+                      }}
+                    >
+                      <span className="horizon-badge horizon-badge-primary w-fit-content mb-2">Himalayan Trails</span>
+                      <h4 className="fw-bold mb-1 text-white">Manali, Himachal</h4>
+                      <p className="small mb-0 opacity-80" style={{ color: '#C9DDF5' }}>Alpine passes, apple orchards, and mountain trail rides.</p>
                     </div>
                   </div>
                 </div>
 
+                {/* Destination 3: Goa */}
                 <div className="col-md-6 col-lg-4">
                   <div 
-                    className="glass-card-hover" 
+                    className="horizon-card horizon-card-hover overflow-hidden cursor-pointer position-relative" 
+                    style={{ height: '300px' }}
                     onClick={() => quickStartDestination('Goa', 'Pure Relaxation')}
-                    style={{ position: 'relative', overflow: 'hidden', height: '280px', width: '100%', borderRadius: '20px', cursor: 'pointer', backgroundColor: '#1e293b' }}
                   >
                     <DestinationImage 
                       destName="Goa" 
                       alt="Goa" 
-                      style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block', zIndex: 1 }}
+                      className="horizon-dest-img position-absolute top-0 start-0 w-100 h-100" 
                     />
-                    <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(15, 23, 42, 0.95) 0%, rgba(15, 23, 42, 0.3) 60%, transparent 100%)', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', padding: '20px', color: 'white', zIndex: 2 }}>
-                      <span className="badge bg-primary bg-opacity-75 rounded-pill w-fit-content mb-2">Coastal Relaxation</span>
-                      <h4 className="fw-bold mb-1">Goa Beaches</h4>
-                      <p className="small mb-0 opacity-80">Sun-kissed coastlines, seafood, and sunset cruises.</p>
+                    <div 
+                      className="position-absolute inset-0 d-flex flex-column justify-content-end p-4 text-white"
+                      style={{ 
+                        background: 'linear-gradient(to top, rgba(11, 20, 48, 0.95) 0%, rgba(11, 20, 48, 0.3) 65%, transparent 100%)',
+                        zIndex: 2 
+                      }}
+                    >
+                      <span className="horizon-badge horizon-badge-primary w-fit-content mb-2">Coastal Serenity</span>
+                      <h4 className="fw-bold mb-1 text-white">Goa Coastline</h4>
+                      <p className="small mb-0 opacity-80" style={{ color: '#C9DDF5' }}>Golden beaches, Portuguese heritage, and seafood dining.</p>
                     </div>
                   </div>
                 </div>
+
               </div>
             </section>
 
-            {/* LIVE SAMPLE ITINERARY DEMO WIDGET */}
-            <section className="py-5">
-              <div className="glass-card rounded-5 p-4 p-lg-5">
-                <div className="text-center max-w-xl mx-auto mb-4">
-                  <span className="badge bg-primary bg-opacity-10 text-primary rounded-pill px-3 py-2 fw-semibold mb-2">
-                    Interactive Preview
-                  </span>
-                  <h3 className="fw-bold mb-2">What Your Itinerary Looks Like</h3>
-                  <p className="text-muted small">Every generated plan comes with flight links, hotel options, daily breakdowns, and Google Maps pins.</p>
-                </div>
-
-                {/* Day Tabs */}
-                <div className="d-flex justify-content-center gap-2 mb-4">
-                  {[1, 2, 3].map((d) => (
-                    <button
-                      key={d}
-                      className={`btn btn-sm rounded-pill px-4 py-2 fw-semibold ${demoDay === d ? 'btn-primary' : 'btn-outline-secondary'}`}
-                      onClick={() => setDemoDay(d)}
-                    >
-                      Day {d} Plan
-                    </button>
-                  ))}
-                </div>
-
-                {/* Sample Content */}
-                <div className="p-4 rounded-4 bg-body-tertiary">
-                  {demoDay === 1 && (
-                    <div className="animate-fade-up">
-                      <div className="d-flex align-items-center justify-content-between mb-3 border-bottom pb-3">
-                        <h5 className="fw-bold mb-0">Day 1: Arrival & Historic City Core</h5>
-                        <a href="https://www.google.com/travel/flights" target="_blank" rel="noreferrer" className="btn btn-outline-primary btn-sm rounded-pill d-inline-flex align-items-center gap-1">
-                          <span>Search Flights</span>
-                          <ExternalLink size={14} />
-                        </a>
-                      </div>
-                      <p className="text-muted small mb-3">
-                        Arrive at your destination, check into your stay, and take an evening walking tour around historic landmarks.
-                      </p>
-                      <div className="row g-3">
-                        <div className="col-md-6">
-                          <div className="p-3 rounded-3 bg-body border">
-                            <div className="fw-semibold small mb-1">Recommended Stay</div>
-                            <div className="small text-muted mb-2">Heritage Boutique Resort (Central Location)</div>
-                            <a href="https://www.google.com/travel/search" target="_blank" rel="noreferrer" className="text-primary small fw-semibold text-decoration-none d-inline-flex align-items-center gap-1">
-                              <span>Book Hotel</span>
-                              <ExternalLink size={12} />
-                            </a>
-                          </div>
-                        </div>
-                        <div className="col-md-6">
-                          <div className="p-3 rounded-3 bg-body border">
-                            <div className="fw-semibold small mb-1">Lunch Spot</div>
-                            <div className="small text-muted mb-2">Traditional Royal Thali Restaurant</div>
-                            <a href="https://www.google.com/maps" target="_blank" rel="noreferrer" className="text-primary small fw-semibold text-decoration-none d-inline-flex align-items-center gap-1">
-                              <span>Google Maps Location</span>
-                              <MapPin size={12} />
-                            </a>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {demoDay === 2 && (
-                    <div className="animate-fade-up">
-                      <div className="d-flex align-items-center justify-content-between mb-3 border-bottom pb-3">
-                        <h5 className="fw-bold mb-0">Day 2: Deep Exploration & Scenic Sunset</h5>
-                        <span className="badge bg-success bg-opacity-10 text-success rounded-pill px-3 py-2">Full Activity Day</span>
-                      </div>
-                      <p className="text-muted small mb-3">
-                        Full day exploring local museum artifacts, taking scenic bike trials, and watching the sunset over panoramic view points.
-                      </p>
-                      <div className="row g-3">
-                        <div className="col-md-6">
-                          <div className="p-3 rounded-3 bg-body border">
-                            <div className="fw-semibold small mb-1">Morning Activity</div>
-                            <div className="small text-muted">Guided heritage walk & palace gallery museum</div>
-                          </div>
-                        </div>
-                        <div className="col-md-6">
-                          <div className="p-3 rounded-3 bg-body border">
-                            <div className="fw-semibold small mb-1">Sunset Point</div>
-                            <div className="small text-muted">Hilltop observatory & café overlook</div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {demoDay === 3 && (
-                    <div className="animate-fade-up">
-                      <div className="d-flex align-items-center justify-content-between mb-3 border-bottom pb-3">
-                        <h5 className="fw-bold mb-0">Day 3: Local Markets & Departure</h5>
-                        <span className="badge bg-secondary bg-opacity-10 text-secondary rounded-pill px-3 py-2">Half Day</span>
-                      </div>
-                      <p className="text-muted small mb-3">
-                        Visit local artisan bazaars for souvenirs, enjoy a relaxed brunch, and head to the airport or station.
-                      </p>
-                      <div className="row g-3">
-                        <div className="col-md-6">
-                          <div className="p-3 rounded-3 bg-body border">
-                            <div className="fw-semibold small mb-1">Artisan Shopping</div>
-                            <div className="small text-muted">Local spice market & handicraft stalls</div>
-                          </div>
-                        </div>
-                        <div className="col-md-6">
-                          <div className="p-3 rounded-3 bg-body border">
-                            <div className="fw-semibold small mb-1">Farewell Meal</div>
-                            <div className="small text-muted">Rooftop Garden Café</div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </section>
-
-            {/* THREE TECH PILLARS */}
+            {/* THREE ARCHITECTURE PILLARS */}
             <section className="py-5">
               <div className="text-center mb-5 max-w-2xl mx-auto">
-                <h3 className="fw-bold display-6 mb-2">Powered by Modern Intelligence</h3>
-                <p className="text-muted">Combining machine learning price models and generative LLMs for complete travel accuracy.</p>
+                <span className="horizon-badge mb-2">INTELLIGENT FOUNDATION</span>
+                <h3 className="display-6 fw-bold mb-2">The Horizon Standard</h3>
+                <p className="text-muted">Designed for travel precision, fast execution, and delightful simplicity.</p>
               </div>
 
               <div className="row g-4">
                 <div className="col-md-4">
-                  <div className="glass-card rounded-4 p-4 h-100 d-flex flex-column">
-                    <div className="p-3 rounded-3 bg-primary bg-opacity-10 text-primary w-fit-content mb-3">
+                  <div className="horizon-card p-4 h-100 d-flex flex-column">
+                    <div className="p-3 rounded-4 w-fit-content mb-3" style={{ background: 'rgba(62, 100, 176, 0.15)', color: '#3E64B0' }}>
                       <Zap size={24} />
                     </div>
-                    <h5 className="fw-bold mb-2">Smart Budget Estimation</h5>
-                    <p className="text-muted small flex-grow-1">
-                      Predicts accurate travel budget ranges (INR) tailored to your duration and choice of Backpacker, Medium, or Luxury stay.
+                    <h5 className="fw-bold mb-2">Neural Cost Estimation</h5>
+                    <p className="text-muted small flex-grow-1" style={{ lineHeight: '1.7' }}>
+                      Accurately calculates tiered budgets in ₹ (INR) including accommodations, dining, local transit, and activities for custom durations.
                     </p>
                   </div>
                 </div>
 
                 <div className="col-md-4">
-                  <div className="glass-card rounded-4 p-4 h-100 d-flex flex-column">
-                    <div className="p-3 rounded-3 bg-primary bg-opacity-10 text-primary w-fit-content mb-3">
-                      <Globe size={24} />
+                  <div className="horizon-card p-4 h-100 d-flex flex-column">
+                    <div className="p-3 rounded-4 w-fit-content mb-3" style={{ background: 'rgba(31, 53, 112, 0.15)', color: '#1F3570' }}>
+                      <MapPin size={24} />
                     </div>
-                    <h5 className="fw-bold mb-2">Gemini 2.5 Multi-Lingual</h5>
-                    <p className="text-muted small flex-grow-1">
-                      Generates complete itineraries in 7 languages (English, Hindi, Gujarati, Marathi, Bengali, Tamil, Telugu).
+                    <h5 className="fw-bold mb-2">Live Map & Flight Sync</h5>
+                    <p className="text-muted small flex-grow-1" style={{ lineHeight: '1.7' }}>
+                      Provides one-click search for Google Flights and Google Maps search links for every restaurant and local heritage attraction.
                     </p>
                   </div>
                 </div>
 
                 <div className="col-md-4">
-                  <div className="glass-card rounded-4 p-4 h-100 d-flex flex-column">
-                    <div className="p-3 rounded-3 bg-primary bg-opacity-10 text-primary w-fit-content mb-3">
-                      <Map size={24} />
+                  <div className="horizon-card p-4 h-100 d-flex flex-column">
+                    <div className="p-3 rounded-4 w-fit-content mb-3" style={{ background: 'rgba(127, 166, 224, 0.2)', color: '#3E64B0' }}>
+                      <FileText size={24} />
                     </div>
-                    <h5 className="fw-bold mb-2">Live Maps & Flight Sync</h5>
-                    <p className="text-muted small flex-grow-1">
-                      Includes clickable Google Maps links for restaurants and search links for flights and accommodations.
+                    <h5 className="fw-bold mb-2">1-Click PDF & Calendar</h5>
+                    <p className="text-muted small flex-grow-1" style={{ lineHeight: '1.7' }}>
+                      Export crisp PDF itineraries for offline travel or sync directly to Google Calendar with structured daily schedule events.
                     </p>
                   </div>
                 </div>
-              </div>
-            </section>
-
-            {/* REVIEWS & FEEDBACK */}
-            <section className="py-5">
-              <div className="text-center mb-5 max-w-xl mx-auto">
-                <h3 className="fw-bold mb-2">What Travelers Say</h3>
-                <p className="text-muted small">Real feedback from users who planned their vacations with AI.</p>
-              </div>
-
-              <div className="row g-4">
-                <div className="col-md-4">
-                  <div className="glass-card rounded-4 p-4 h-100">
-                    <div className="d-flex text-warning mb-3">
-                      {[...Array(5)].map((_, i) => <Star key={i} size={16} fill="currentColor" />)}
-                    </div>
-                    <p className="small text-muted mb-3">
-                      "Saved me hours of research for my trip to Manali. The hotel recommendations and budget predictions were spot-on!"
-                    </p>
-                    <div className="d-flex align-items-center gap-2">
-                      <div className="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold" style={{ width: '36px', height: '36px', fontSize: '0.85rem' }}>
-                        RK
-                      </div>
-                      <div>
-                        <div className="fw-semibold small">Rohit Kumar</div>
-                        <div className="text-muted" style={{ fontSize: '0.75rem' }}>Traveled to Himachal</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="col-md-4">
-                  <div className="glass-card rounded-4 p-4 h-100">
-                    <div className="d-flex text-warning mb-3">
-                      {[...Array(5)].map((_, i) => <Star key={i} size={16} fill="currentColor" />)}
-                    </div>
-                    <p className="small text-muted mb-3">
-                      "Loved that I could get the full itinerary generated in Hindi for my parents. The Google Maps restaurant links made navigating effortless."
-                    </p>
-                    <div className="d-flex align-items-center gap-2">
-                      <div className="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold" style={{ width: '36px', height: '36px', fontSize: '0.85rem' }}>
-                        PS
-                      </div>
-                      <div>
-                        <div className="fw-semibold small">Priya Sharma</div>
-                        <div className="text-muted" style={{ fontSize: '0.75rem' }}>Traveled to Udaipur</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="col-md-4">
-                  <div className="glass-card rounded-4 p-4 h-100">
-                    <div className="d-flex text-warning mb-3">
-                      {[...Array(5)].map((_, i) => <Star key={i} size={16} fill="currentColor" />)}
-                    </div>
-                    <p className="small text-muted mb-3">
-                      "One-click PDF download and Google Calendar integration made keeping track of our daily itinerary so convenient."
-                    </p>
-                    <div className="d-flex align-items-center gap-2">
-                      <div className="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold" style={{ width: '36px', height: '36px', fontSize: '0.85rem' }}>
-                        AM
-                      </div>
-                      <div>
-                        <div className="fw-semibold small">Aniket Mehta</div>
-                        <div className="text-muted" style={{ fontSize: '0.75rem' }}>Traveled to Goa</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            {/* PRE-FOOTER CTA */}
-            <section className="py-4 text-center">
-              <div className="p-5 rounded-5 bg-primary bg-gradient text-white position-relative overflow-hidden shadow-xl">
-                <h2 className="fw-extrabold mb-3">Ready to Plan Your Next Journey?</h2>
-                <p className="lead mb-4 text-white-50">Generate your personalized AI itinerary in seconds.</p>
-                <button 
-                  className="btn btn-light text-primary btn-lg rounded-pill fw-bold px-5 py-3 shadow"
-                  onClick={() => setActiveTab('planner')}
-                >
-                  Start Planning Free
-                </button>
               </div>
             </section>
 
@@ -848,24 +764,25 @@ function App() {
         )}
 
         {/* ========================================================== */}
-        {/* PLANNER TAB                                                 */}
+        {/* TAB 2: TRIP PLANNER VIEW                                   */}
         {/* ========================================================== */}
         {activeTab === 'planner' && (
-          <div className="animate-fade-up max-w-4xl mx-auto">
+          <div className="animate-horizon-fade max-w-4xl mx-auto">
             
             <div className="text-center mb-5">
-              <h1 className="fw-extrabold display-5 mb-2">Plan Your Journey</h1>
-              <p className="text-muted fs-5">Fill in your travel preferences and let AI build your custom schedule.</p>
+              <span className="horizon-badge mb-2">TRIP ARCHITECT</span>
+              <h1 className="display-5 fw-bold mb-2">Plan Your Custom Journey</h1>
+              <p className="text-muted fs-5">Configure your destination, pace, and style. Our engine handles the rest.</p>
             </div>
 
-            {/* Planner Form */}
-            <div className="glass-card rounded-5 p-4 p-md-5 mb-5 shadow-lg">
+            {/* FORM CONSOLE */}
+            <div className="horizon-card p-4 p-md-5 mb-5 shadow-lg">
               <form onSubmit={handleGenerate}>
                 <div className="row g-4">
                   
-                  {/* Destination */}
+                  {/* Destination - Tested by Selenium test_ui.py (ID: destInput) */}
                   <div className="col-md-8">
-                    <div className="form-floating">
+                    <div className="horizon-form-floating form-floating">
                       <input 
                         type="text" 
                         className="form-control" 
@@ -879,9 +796,9 @@ function App() {
                     </div>
                   </div>
 
-                  {/* Duration Days */}
+                  {/* Duration - Tested by Selenium test_ui.py (ID: daysInput) */}
                   <div className="col-md-4">
-                    <div className="form-floating">
+                    <div className="horizon-form-floating form-floating">
                       <input 
                         type="number" 
                         className="form-control" 
@@ -890,15 +807,33 @@ function App() {
                         value={days} 
                         onChange={(e) => setDays(e.target.value)} 
                         min="1" 
+                        max="30"
                         required 
                       />
                       <label htmlFor="daysInput">Duration (Days)</label>
                     </div>
                   </div>
-                  
-                  {/* Theme Vibe */}
+
+                  {/* Budget Select - Tested by Selenium test_ui.py (ID: budgetSelect) */}
                   <div className="col-md-4">
-                    <div className="form-floating">
+                    <div className="horizon-form-floating form-floating">
+                      <select 
+                        className="form-select" 
+                        id="budgetSelect" 
+                        value={budgetLevel} 
+                        onChange={(e) => setBudgetLevel(e.target.value)}
+                      >
+                        <option value="Low">Low (Backpacker)</option>
+                        <option value="Medium">Medium (Balanced)</option>
+                        <option value="High">High (Luxury)</option>
+                      </select>
+                      <label htmlFor="budgetSelect">Budget Tier</label>
+                    </div>
+                  </div>
+
+                  {/* Theme Select */}
+                  <div className="col-md-4">
+                    <div className="horizon-form-floating form-floating">
                       <select 
                         className="form-select" 
                         id="themeSelect" 
@@ -910,31 +845,15 @@ function App() {
                         <option value="Cultural Heritage">Cultural Heritage</option>
                         <option value="Scenic Bike Riding">Scenic Bike Riding</option>
                         <option value="Pure Relaxation">Pure Relaxation</option>
+                        <option value="Food & Culinary Tour">Food & Culinary Tour</option>
                       </select>
-                      <label htmlFor="themeSelect">Travel Theme & Vibe</label>
+                      <label htmlFor="themeSelect">Travel Theme</label>
                     </div>
                   </div>
 
-                  {/* Budget Level */}
+                  {/* Language Select */}
                   <div className="col-md-4">
-                    <div className="form-floating">
-                      <select 
-                        className="form-select" 
-                        id="budgetSelect" 
-                        value={budgetLevel} 
-                        onChange={(e) => setBudgetLevel(e.target.value)}
-                      >
-                        <option value="Low">Low (Backpacker)</option>
-                        <option value="Medium">Medium (Balanced)</option>
-                        <option value="High">High (Luxury)</option>
-                      </select>
-                      <label htmlFor="budgetSelect">Budget Style</label>
-                    </div>
-                  </div>
-
-                  {/* Language */}
-                  <div className="col-md-4">
-                    <div className="form-floating">
+                    <div className="horizon-form-floating form-floating">
                       <select 
                         className="form-select" 
                         id="languageSelect" 
@@ -949,21 +868,34 @@ function App() {
                         <option value="Tamil">Tamil</option>
                         <option value="Telugu">Telugu</option>
                       </select>
-                      <label htmlFor="languageSelect">Output Language</label>
+                      <label htmlFor="languageSelect">Language</label>
                     </div>
                   </div>
 
-                  {/* Submit Button */}
-                  <div className="col-12 mt-4">
+                  {/* Live Budget Preview Pill */}
+                  <div className="col-12">
+                    <div className="d-flex align-items-center justify-content-between p-3 rounded-4" style={{ background: 'var(--hc-cloud-mist)', color: '#0B1430' }}>
+                      <div className="d-flex align-items-center gap-2">
+                        <Zap size={18} color="#1F3570" />
+                        <span className="small fw-semibold">Estimated Budget Forecast ({days} Days, {budgetLevel}):</span>
+                      </div>
+                      <div className="fw-bold font-display" style={{ color: '#0B1430' }}>
+                        {calculateBudgetPreview(days, budgetLevel)}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Submit Button - Tested by Selenium test_ui.py */}
+                  <div className="col-12 mt-2">
                     <button 
                       type="submit" 
-                      className="btn btn-primary-gradient w-100 btn-lg rounded-pill py-3 fw-bold d-flex align-items-center justify-content-center gap-2" 
+                      className="btn-horizon-primary w-100 py-3 fs-5"
                       disabled={isLoading}
                     >
                       {isLoading ? (
                         <>
-                          <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                          <span>{loadingText}</span>
+                          <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                          <span>{loadingMessages[loadingStep]}</span>
                         </>
                       ) : (
                         <>
@@ -978,71 +910,92 @@ function App() {
               </form>
             </div>
 
-            {/* Generated Itinerary Output */}
+            {/* GENERATED ITINERARY DISPLAY */}
             {itinerary && (
-              <div className="glass-card rounded-5 overflow-hidden shadow-2xl mb-5 animate-fade-up">
+              <div className="horizon-card overflow-hidden shadow-2xl mb-5 animate-horizon-fade">
                 
-                {/* Sticky Header Bar */}
-                <div className="p-4 bg-primary text-white d-flex flex-column flex-md-row justify-content-between align-items-center gap-3 sticky-top" style={{ top: '65px', zIndex: 10 }}>
+                {/* Action Header Bar */}
+                <div 
+                  className="p-4 d-flex flex-column flex-md-row justify-content-between align-items-center gap-3 sticky-top"
+                  style={{ 
+                    top: '72px', 
+                    zIndex: 20, 
+                    background: 'linear-gradient(135deg, #0B1430 0%, #1F3570 100%)',
+                    color: '#FFF6E8',
+                    borderBottom: '1px solid rgba(127, 166, 224, 0.3)'
+                  }}
+                >
                   <div>
-                    <h3 className="fw-bold mb-1 text-capitalize">{destination} ({days} Days)</h3>
-                    <p className="mb-0 opacity-80 small">{theme} • {budgetLevel} Budget • {language}</p>
+                    <h3 className="fw-bold mb-1 text-capitalize" style={{ color: '#FFF6E8' }}>
+                      {destination} • {days} Days
+                    </h3>
+                    <div className="small opacity-80" style={{ color: '#C9DDF5' }}>
+                      {theme} • {budgetLevel} Tier • {language}
+                    </div>
                   </div>
-                  
-                  <div className="d-flex gap-2">
+
+                  <div className="d-flex flex-wrap gap-2">
                     <button 
                       onClick={handleAddToCalendar} 
-                      className="btn btn-light text-primary rounded-pill btn-sm fw-semibold d-inline-flex align-items-center gap-2 px-3"
+                      className="btn-horizon-cream btn-sm"
                       title="Add to Google Calendar"
                     >
-                      <Calendar size={16} />
+                      <Calendar size={15} />
                       <span>Calendar</span>
                     </button>
 
                     <button 
                       onClick={handleDownloadPDF} 
-                      className="btn btn-light text-primary rounded-pill btn-sm fw-semibold d-inline-flex align-items-center gap-2 px-3"
+                      className="btn-horizon-cream btn-sm"
                       title="Download PDF"
                     >
-                      <Download size={16} />
-                      <span>PDF</span>
+                      <Download size={15} />
+                      <span>Export PDF</span>
                     </button>
 
                     <button 
                       onClick={handleCopy} 
-                      className="btn btn-light text-primary rounded-pill btn-sm fw-semibold d-inline-flex align-items-center gap-2 px-3"
-                      title="Copy Itinerary"
+                      className="btn-horizon-cream btn-sm"
+                      title="Copy Itinerary Text"
                     >
-                      <Copy size={16} />
+                      <Copy size={15} />
                       <span>Copy</span>
                     </button>
                   </div>
                 </div>
 
                 {/* Destination Cover Photo */}
-                <div className="w-100 position-relative rounded-top-5 overflow-hidden" style={{ height: '320px', backgroundColor: '#1e293b' }}>
+                <div className="w-100 position-relative" style={{ height: '320px', backgroundColor: '#0B1430' }}>
                   <DestinationImage 
                     destName={destination} 
                     alt={destination} 
                     className="w-100 h-100" 
                     style={{ objectFit: 'cover' }} 
                   />
+                  <div 
+                    className="position-absolute bottom-0 start-0 end-0 p-4" 
+                    style={{ background: 'linear-gradient(to top, rgba(11, 20, 48, 0.9) 0%, transparent 100%)' }}
+                  >
+                    <span className="horizon-badge horizon-badge-primary">
+                      {destination} Travel Schedule
+                    </span>
+                  </div>
                 </div>
 
-                {/* Itinerary Markdown Body */}
+                {/* Markdown Content - Tested by Selenium test_ui.py (ID: itinerary-content) */}
                 <div id="itinerary-content" className="p-4 p-md-5">
-                  <div className="markdown-body" style={{ lineHeight: '1.8', fontSize: '1.05rem' }}>
+                  <div className="horizon-markdown">
                     <Markdown 
-                      components={{ 
+                      components={{
                         a: ({node, ...props}) => (
                           <a 
                             target="_blank" 
                             rel="noopener noreferrer" 
-                            className="fw-semibold text-primary text-decoration-none d-inline-flex align-items-center gap-1" 
+                            className="d-inline-flex align-items-center gap-1"
                             {...props}
                           >
                             <span>{props.children}</span>
-                            <ExternalLink size={14} />
+                            <ExternalLink size={13} />
                           </a>
                         )
                       }}
@@ -1052,8 +1005,8 @@ function App() {
                   </div>
                 </div>
 
-                {/* Embedded Interactive Google Map */}
-                <div className="w-100 border-top border-bottom" style={{ height: '380px' }}>
+                {/* Interactive Map Embed */}
+                <div className="w-100 border-top border-bottom" style={{ height: '360px' }}>
                   <iframe
                     title={`Map of ${destination}`}
                     width="100%"
@@ -1064,14 +1017,14 @@ function App() {
                     src={`https://maps.google.com/maps?q=${encodeURIComponent(destination)}&t=&z=11&ie=UTF8&iwloc=&output=embed`}
                   ></iframe>
                 </div>
-                
-                {/* Save Trip Button Footer */}
-                <div className="p-4 text-center">
+
+                {/* Save Trip Footer */}
+                <div className="p-4 text-center" style={{ background: 'var(--bg-surface-elevated)' }}>
                   <button 
                     onClick={handleSaveTrip} 
-                    className="btn btn-success btn-lg rounded-pill fw-bold px-5 py-3 d-inline-flex align-items-center gap-2 shadow"
+                    className="btn-horizon-primary px-5 py-3 fs-5"
                   >
-                    <FileText size={20} />
+                    <BookmarkCheck size={20} />
                     <span>Save This Trip to Library</span>
                   </button>
                 </div>
@@ -1083,59 +1036,83 @@ function App() {
         )}
 
         {/* ========================================================== */}
-        {/* MY TRIPS TAB                                                */}
+        {/* TAB 3: MY TRIPS / SAVED LIBRARY                            */}
         {/* ========================================================== */}
         {activeTab === 'myTrips' && (
-          <div className="animate-fade-up">
+          <div className="animate-horizon-fade">
             
-            <div className="text-center mb-5">
-              <h1 className="fw-extrabold display-5 mb-2">Saved Trips Library</h1>
-              <p className="text-muted fs-5">Browse and manage your saved travel itineraries.</p>
+            <div className="text-center mb-4">
+              <span className="horizon-badge mb-2">PERSONAL ARCHIVE</span>
+              <h1 className="display-5 fw-bold mb-2">Saved Trips Library</h1>
+              <p className="text-muted fs-5">Access your past generated itineraries anytime.</p>
             </div>
 
+            {/* Search Filter Bar */}
+            <div className="max-w-md mx-auto mb-5">
+              <div className="input-group horizon-card p-1 shadow-sm">
+                <span className="input-group-text bg-transparent border-0 ps-3">
+                  <Search size={18} color="var(--text-muted)" />
+                </span>
+                <input 
+                  type="text" 
+                  className="form-control bg-transparent border-0 shadow-none text-heading" 
+                  placeholder="Filter saved trips by destination or theme..." 
+                  value={savedSearchQuery}
+                  onChange={(e) => setSavedSearchQuery(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Cards Grid */}
             <div className="row g-4">
-              {savedTrips.length > 0 ? (
-                savedTrips.map((trip) => (
+              {filteredTrips.length > 0 ? (
+                filteredTrips.map((trip) => (
                   <div className="col-md-6 col-lg-4" key={trip.id}>
-                    <div className="glass-card rounded-4 h-100 overflow-hidden d-flex flex-column">
+                    <div className="horizon-card h-100 overflow-hidden d-flex flex-column">
                       
-                      {/* Image Header */}
-                      <div className="position-relative" style={{ height: '150px', backgroundColor: '#1e293b' }}>
+                      {/* Image Thumbnail */}
+                      <div className="position-relative" style={{ height: '180px', backgroundColor: '#0B1430' }}>
                         <DestinationImage 
                           destName={trip.destination} 
                           alt={trip.destination} 
-                          className="w-100 h-100" 
-                          style={{ objectFit: 'cover' }} 
+                          className="horizon-dest-img" 
                         />
-                        <span className="position-absolute top-0 end-0 m-3 badge bg-dark bg-opacity-75 rounded-pill px-3 py-2">
+                        <span 
+                          className="position-absolute top-0 end-0 m-3 horizon-badge"
+                          style={{ backgroundColor: 'rgba(11, 20, 48, 0.85)', color: '#FFF6E8', border: 'none' }}
+                        >
                           {trip.days} Days
                         </span>
                       </div>
 
-                      {/* Card Content */}
+                      {/* Content */}
                       <div className="p-4 d-flex flex-column flex-grow-1">
                         <h4 className="fw-bold text-capitalize mb-1">{trip.destination}</h4>
-                        <div className="text-muted small mb-3">{trip.theme} • {trip.budget_level} Budget</div>
+                        <div className="text-muted small mb-3">
+                          {trip.theme} • {trip.budget_level} Tier
+                        </div>
 
-                        <div className="d-flex gap-2 mt-auto pt-3 border-top border-opacity-10">
+                        {/* Actions */}
+                        <div className="d-flex align-items-center gap-2 mt-auto pt-3 border-top border-opacity-10">
                           <button 
-                            className="btn btn-primary rounded-pill flex-grow-1 fw-semibold btn-sm py-2" 
+                            className="btn-horizon-primary flex-grow-1 py-2 btn-sm"
                             onClick={() => {
-                              setItinerary(trip.itinerary); 
-                              setDestination(trip.destination); 
-                              setDays(trip.days); 
-                              setTheme(trip.theme); 
-                              setBudgetLevel(trip.budget_level || 'Medium'); 
+                              setDestination(trip.destination);
+                              setDays(trip.days.toString());
+                              setTheme(trip.theme);
+                              setBudgetLevel(trip.budget_level || 'Medium');
+                              setItinerary(trip.itinerary);
                               setActiveTab('planner');
+                              showToast(`Loaded ${trip.destination} itinerary!`, "primary");
                             }}
                           >
-                            View Itinerary
+                            <span>View Itinerary</span>
                           </button>
-                          
+
                           <button 
-                            className="btn btn-outline-danger rounded-circle p-2 d-flex align-items-center justify-content-center" 
-                            style={{ width: '36px', height: '36px' }}
-                            onClick={() => setTripToDelete(trip.id)} 
+                            className="btn btn-outline-danger rounded-circle p-2 d-flex align-items-center justify-content-center"
+                            style={{ width: '38px', height: '38px' }}
+                            onClick={() => setTripToDelete(trip.id)}
                             title="Delete Trip"
                           >
                             <Trash2 size={16} />
@@ -1148,16 +1125,21 @@ function App() {
                 ))
               ) : (
                 <div className="col-12 text-center py-5">
-                  <div className="p-4 rounded-circle bg-primary bg-opacity-10 text-primary d-inline-flex mb-3">
+                  <div 
+                    className="p-4 rounded-circle d-inline-flex mb-3"
+                    style={{ background: 'var(--hc-cloud-mist)', color: '#1F3570' }}
+                  >
                     <Compass size={48} />
                   </div>
-                  <h4 className="fw-bold text-muted">No saved trips found</h4>
-                  <p className="text-muted">Start by generating your first itinerary in the planner tab.</p>
+                  <h4 className="fw-bold mb-2">No Saved Trips Found</h4>
+                  <p className="text-muted mb-4">
+                    {savedSearchQuery ? "No trips matched your search filter." : "Start by generating your first custom travel schedule in the planner."}
+                  </p>
                   <button 
-                    className="btn btn-primary rounded-pill px-4 py-2 fw-semibold mt-2" 
+                    className="btn-horizon-primary" 
                     onClick={() => setActiveTab('planner')}
                   >
-                    Plan a New Trip
+                    Create a New Itinerary
                   </button>
                 </div>
               )}
@@ -1168,89 +1150,85 @@ function App() {
 
       </main>
 
-      {/* FULL LANDING PAGE FOOTER */}
-      <footer className="mt-auto border-top glass-nav py-5" style={{ zIndex: 10 }}>
+      {/* ========================================================== */}
+      {/* FOOTER                                                     */}
+      {/* ========================================================== */}
+      <footer 
+        className="mt-auto py-5 border-top"
+        style={{ 
+          background: isDarkMode ? '#070D21' : '#FFF6E8', 
+          borderColor: 'var(--border-subtle)' 
+        }}
+      >
         <div className="container max-w-7xl">
           <div className="row g-4">
             
-            {/* Brand & Description */}
-            <div className="col-lg-4">
-              <div className="d-flex align-items-center gap-2 fw-bold fs-5 text-gradient mb-3">
-                <div className="p-2 rounded-3 bg-primary text-white d-flex align-items-center justify-content-center shadow-sm">
-                  <Compass size={20} />
+            {/* Branding Column */}
+            <div className="col-lg-5">
+              <div className="d-flex align-items-center gap-2 fw-bold fs-5 text-horizon-gradient mb-2">
+                <div 
+                  className="p-2 rounded-3 text-white d-flex align-items-center justify-content-center"
+                  style={{ background: '#3E64B0', width: '36px', height: '36px' }}
+                >
+                  <Compass size={20} color="#FFF6E8" />
                 </div>
-                <span>AI TRIP PLANNER</span>
+                <span>HORIZON CODE</span>
               </div>
               <p className="text-muted small mb-3 max-w-sm" style={{ lineHeight: '1.7' }}>
-                Next-generation intelligent travel itinerary generator. Powered by TensorFlow neural price estimation and Gemini 2.5 generative intelligence.
+                A wide sky waiting to be written. Engineered for seamless multi-day travel itineraries, budget intelligence, and Google Maps integration.
               </p>
-              <div className="d-flex align-items-center gap-2">
-                <span className="badge bg-success bg-opacity-10 text-success rounded-pill px-3 py-2 fw-semibold d-inline-flex align-items-center gap-1">
-                  <span className="animate-pulse-dot bg-success rounded-circle d-inline-block" style={{ width: '6px', height: '6px' }}></span>
-                  Systems Operational
-                </span>
+              
+              {/* System status pill */}
+              <div className="d-inline-flex align-items-center gap-2 horizon-badge">
+                <span 
+                  className="rounded-circle d-inline-block" 
+                  style={{ 
+                    width: '8px', 
+                    height: '8px', 
+                    backgroundColor: backendStatus === 'connected' ? '#10b981' : '#f59e0b' 
+                  }}
+                ></span>
+                <span>FastAPI Backend: {backendStatus === 'connected' ? 'Connected (Port 8000)' : 'Standby / Local'}</span>
               </div>
             </div>
 
             {/* Quick Links */}
-            <div className="col-6 col-lg-2">
-              <h6 className="fw-bold mb-3">Navigation</h6>
-              <ul className="list-unstyled small d-flex flex-column gap-2 text-muted mb-0">
-                <li>
-                  <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab('home'); }} className="text-decoration-none text-reset hover-primary">
-                    Home
-                  </a>
-                </li>
-                <li>
-                  <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab('planner'); }} className="text-decoration-none text-reset hover-primary">
-                    Trip Planner
-                  </a>
-                </li>
-                <li>
-                  <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab('myTrips'); }} className="text-decoration-none text-reset hover-primary">
-                    Saved Library
-                  </a>
-                </li>
-              </ul>
-            </div>
-
-            {/* Trending Locations */}
             <div className="col-6 col-lg-3">
-              <h6 className="fw-bold mb-3">Popular Locations</h6>
+              <h6 className="fw-bold mb-3" style={{ color: 'var(--text-heading)' }}>Navigation</h6>
               <ul className="list-unstyled small d-flex flex-column gap-2 text-muted mb-0">
                 <li>
-                  <a href="#" onClick={(e) => { e.preventDefault(); quickStartDestination('Udaipur', 'Historical Mysteries'); }} className="text-decoration-none text-reset">
-                    Udaipur Heritage Tour
+                  <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab('home'); }} className="text-decoration-none text-reset">
+                    Home Portal
                   </a>
                 </li>
                 <li>
-                  <a href="#" onClick={(e) => { e.preventDefault(); quickStartDestination('Manali', 'Scenic Bike Riding'); }} className="text-decoration-none text-reset">
-                    Manali Bike Trails
+                  <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab('planner'); }} className="text-decoration-none text-reset">
+                    Travel Planner
                   </a>
                 </li>
                 <li>
-                  <a href="#" onClick={(e) => { e.preventDefault(); quickStartDestination('Goa', 'Pure Relaxation'); }} className="text-decoration-none text-reset">
-                    Goa Coastal Relaxation
+                  <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab('myTrips'); }} className="text-decoration-none text-reset">
+                    Trip Archive
                   </a>
                 </li>
               </ul>
             </div>
 
-            {/* Microservices Stack */}
-            <div className="col-lg-3">
-              <h6 className="fw-bold mb-3">Architecture Stack</h6>
+            {/* Architecture Stack */}
+            <div className="col-6 col-lg-4">
+              <h6 className="fw-bold mb-3" style={{ color: 'var(--text-heading)' }}>Horizon Tech Stack</h6>
               <div className="d-flex flex-column gap-2 small text-muted">
                 <span className="d-flex align-items-center gap-2">
-                  <Activity size={14} className="text-success" />
-                  FastAPI Python (Port 8000)
+                  <Activity size={14} color="#3E64B0" />
+                  FastAPI Python & SQLite Database
                 </span>
                 <span className="d-flex align-items-center gap-2">
-                  <Zap size={14} className="text-primary" />
-                  Google Gemini 2.5 LLM Engine
+                  <Zap size={14} color="#7FA6E0" />
+                  Gemini LLM & Horizon Smart Planner
                 </span>
                 <span className="d-flex align-items-center gap-2">
-                  <Layers size={14} className="text-info" />
-                  React 19 + Vite Frontend
+                  <Layers size={14} color="#1F3570" />
+                  React 19, Vite & Bootstrap 5
                 </span>
               </div>
             </div>
@@ -1258,37 +1236,72 @@ function App() {
           </div>
 
           <div className="d-flex flex-column flex-sm-row justify-content-between align-items-center pt-4 mt-4 border-top border-opacity-10 small text-muted">
-            <div>© {new Date().getFullYear()} AI Trip Planner. All rights reserved.</div>
-            <div className="mt-2 mt-sm-0">Built with modern web standards and clean vector design.</div>
+            <div>© {new Date().getFullYear()} Horizon Code. Color Palette: #0B1430, #1F3570, #3E64B0, #7FA6E0, #C9DDF5, #FFF6E8.</div>
+            <div className="mt-2 mt-sm-0">All itineraries generated with intelligent travel forecasting.</div>
           </div>
         </div>
       </footer>
 
-      {/* Toast Notification Container */}
+      {/* ========================================================== */}
+      {/* FLOATING TOAST NOTIFICATION CONTAINER                      */}
+      {/* ========================================================== */}
       <div className="toast-container position-fixed bottom-0 end-0 p-3" style={{ zIndex: 1100 }}>
-        <div className={`toast align-items-center text-bg-${toast.type} border-0 rounded-4 shadow-lg ${toast.show ? 'show' : 'hide'}`} role="alert" aria-live="assertive" aria-atomic="true">
-          <div className="d-flex">
-            <div className="toast-body fw-semibold p-3 d-flex align-items-center gap-2">
-              <CheckCircle2 size={18} />
+        <div 
+          className={`toast align-items-center border-0 rounded-4 shadow-lg ${toast.show ? 'show' : 'hide'}`} 
+          style={{ 
+            background: 'var(--hc-deep-navy)', 
+            color: '#FFF6E8',
+            border: '1px solid rgba(127, 166, 224, 0.4)' 
+          }}
+          role="alert"
+        >
+          <div className="d-flex align-items-center justify-content-between p-3">
+            <div className="d-flex align-items-center gap-2 fw-semibold">
+              <CheckCircle2 size={18} color="#7FA6E0" />
               <span>{toast.message}</span>
             </div>
-            <button type="button" className="btn-close btn-close-white me-3 m-auto" onClick={() => setToast({ ...toast, show: false })} aria-label="Close"></button>
+            <button 
+              type="button" 
+              className="btn-close btn-close-white ms-3" 
+              onClick={() => setToast({ ...toast, show: false })} 
+              aria-label="Close"
+            ></button>
           </div>
         </div>
       </div>
 
-      {/* Delete Modal Confirmation */}
+      {/* ========================================================== */}
+      {/* DELETE MODAL CONFIRMATION                                  */}
+      {/* ========================================================== */}
       {tripToDelete && (
-        <div className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center" style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 1100 }}>
-          <div className="glass-card rounded-5 p-4 text-center max-w-sm mx-auto shadow-2xl">
-            <div className="p-3 rounded-circle bg-danger bg-opacity-10 text-danger d-inline-flex mb-3">
+        <div 
+          className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center"
+          style={{ backgroundColor: 'rgba(11, 20, 48, 0.75)', backdropFilter: 'blur(8px)', zIndex: 1200 }}
+        >
+          <div className="horizon-card p-4 text-center max-w-sm mx-auto shadow-2xl">
+            <div 
+              className="p-3 rounded-circle d-inline-flex mb-3"
+              style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444' }}
+            >
               <AlertTriangle size={32} />
             </div>
             <h4 className="fw-bold mb-2">Delete this trip?</h4>
-            <p className="text-muted small mb-4">This action cannot be undone. The itinerary will be permanently removed from your library.</p>
+            <p className="text-muted small mb-4">
+              This action cannot be undone. The itinerary will be removed from your Horizon Library.
+            </p>
             <div className="d-flex gap-3 justify-content-center">
-              <button className="btn btn-light rounded-pill px-4 fw-semibold" onClick={() => setTripToDelete(null)}>Cancel</button>
-              <button className="btn btn-danger rounded-pill px-4 fw-semibold shadow" onClick={confirmDelete}>Delete</button>
+              <button 
+                className="btn-horizon-outline px-4 btn-sm" 
+                onClick={() => setTripToDelete(null)}
+              >
+                Cancel
+              </button>
+              <button 
+                className="btn btn-danger rounded-pill px-4 btn-sm fw-bold shadow" 
+                onClick={confirmDelete}
+              >
+                Delete
+              </button>
             </div>
           </div>
         </div>
